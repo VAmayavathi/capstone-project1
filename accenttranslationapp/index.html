@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accent Translation</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Real-Time Accent Translation</h1>
+    <form id="translationForm">
+        <label for="inputLang">Input Language:</label>
+        <select id="inputLang">
+            <option value="en">US English</option>
+            <option value="te">Telugu</option>
+            <option value="hi">Hindi</option>
+            <option value="kn">Kannada</option>
+        </select><br><br>
+        
+        <label for="outputLang">Output Language:</label>
+        <select id="outputLang">
+            <option value="en">US English</option>
+            <option value="te">Telugu</option>
+            <option value="hi">Hindi</option>
+            <option value="kn">Kannada</option>
+        </select><br><br>
+
+        <button type="button" onclick="startTranslation()">Start Translation</button>
+    </form>
+
+    <div id="log">
+        <h2>Logs:</h2>
+    </div>
+
+    <script>
+        const socket = io();
+
+        function startTranslation() {
+            const inputLang = document.getElementById('inputLang').value;
+            const outputLang = document.getElementById('outputLang').value;
+
+            // Send language choices to backend
+            socket.emit('start_translation', { input_lang: inputLang, output_lang: outputLang });
+        }
+
+        // Listen for logs from the backend
+        socket.on('log', (data) => {
+            const logDiv = document.getElementById('log');
+            const newLog = document.createElement('p');
+            newLog.textContent = data.message;
+            logDiv.appendChild(newLog);
+        });
+    </script>
+</body>
+</html>
