@@ -1,0 +1,132 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Nov 25 19:28:38 2024
+code for accent translation from different language to other different language (telugu,hindi,kannada,
+    indian english ,us english,uk english)
+@author: mayav
+"""
+import os
+import pyaudio
+import time
+from gtts import gTTS
+import speech_recognition as sr
+from translate import Translator
+
+# Helper Functions
+def get_language_code(lang_choice):
+    """Map the choice to language codes for Google Translate."""
+    lang_codes = {
+        1: "en",  # US English
+        2: "en-GB",  # British English
+        3: "te",  # Telugu
+        4: "hi",  # Hindi
+        5: "kn"   # Kannada
+    }
+    return lang_codes.get(lang_choice, "en")
+
+def translate_and_speak(input_lang, output_lang, vb_cable_index, user_label):
+    """Handles speech recognition, translation, and text-to-speech."""
+    recognizer = sr.Recognizer()
+    mic = sr.Microphone()
+    vb_audio = pyaudio.PyAudio()
+
+    try:
+        # Listening for audio input
+        with mic as source:
+            print(f"{user_label} - Listening for speech in {input_lang}...")
+            recognizer.adjust_for_ambient_noise(source)
+            audio = recognizer.listen(source)
+            recognized_text = recognizer.recognize_google(audio, language=input_lang)
+            print(f"{user_label} - Recognized Text: {recognized_text}")
+
+        # Translating recognized text
+        translator = Translator(from_lang=input_lang, to_lang=output_lang)
+        translated_text = translator.translate(recognized_text)
+        print(f"{user_label} - Translated Text: {translated_text}")
+
+        # Converting translated text to speech
+        tts_output = "output.mp3"
+        tts = gTTS(translated_text, lang=output_lang.split("-")[0])
+        tts.save(tts_output)
+        print(f"{user_label} - Playing translated speech to VB-Cable...")
+
+        # Playing TTS audio to VB-Cable
+        try:
+            stream = vb_audio.open(format=pyaudio.paInt16,
+                                   channels=2,  # Default to stereo
+                                   rate=44100,
+                                   output=True,
+                                   output_device_index=vb_cable_index)
+        except OSError as e:
+            print(f"Error: {e}. Retrying with mono channels...")
+            stream = vb_audio.open(format=pyaudio.paInt16,
+                                   channels=1,  # Fallback to mono
+                                   rate=44100,
+                                   output=True,
+                                   output_device_index=vb_cable_index)
+
+        with open(tts_output, "rb") as f:
+            audio_data = f.read()
+            stream.write(audio_data)
+        stream.stop_stream()
+        stream.close()
+        os.remove(tts_output)
+
+    except sr.UnknownValueError:
+        print(f"{user_label} - Could not understand the audio.")
+    except sr.RequestError as e:
+        print(f"{user_label} - Error with speech recognition: {e}")
+    except Exception as e:
+        print(f"{user_label} - An error occurred: {e}")
+    finally:
+        vb_audio.terminate()
+
+def continuous_translation():
+    """Main loop for bidirectional translation."""
+    # Setup VB-Cable device index
+    vb_audio = pyaudio.PyAudio()
+    vb_cable_index = None
+    for i in range(vb_audio.get_device_count()):
+        device_info = vb_audio.get_device_info_by_index(i)
+        if "VB-Cable" in device_info.get("name", ""):
+            vb_cable_index = i
+            print(f"VB-Cable found at index: {vb_cable_index}")
+            break
+    vb_audio.terminate()
+
+    if vb_cable_index is None:
+        print("VB-Cable not found. Ensure VB-Cable is installed and configured.")
+        return
+
+    # Input/output language selection
+    print("Select input language for User 1 (You):")
+    input_lang_user1 = get_language_code(int(input("Enter choice (1-5): ")))
+
+    print("Select output language for User 2 (Friend):")
+    output_lang_user2 = get_language_code(int(input("Enter choice (1-5): ")))
+
+    print("Select input language for User 2 (Friend):")
+    input_lang_user2 = get_language_code(int(input("Enter choice (1-5): ")))
+
+    print("Select output language for User 1 (You):")
+    output_lang_user1 = get_language_code(int(input("Enter choice (1-5): ")))
+
+    print("Starting continuous bidirectional translation. Press Ctrl+C to stop.")
+
+    try:
+        while True:
+            mic_status = input("Is your microphone ON? (yes/no): ").strip().lower()
+            if mic_status == "yes":
+                print("External voice detected. Activating User 1 for system input.")
+                translate_and_speak(input_lang_user1, output_lang_user2, vb_cable_index, "User 1")
+            elif mic_status == "no":
+                print("Internal voice detected. Activating User 2 for external input.")
+                translate_and_speak(input_lang_user2, output_lang_user1, vb_cable_index, "User 2")
+            else:
+                print("Invalid input. Please enter 'yes' or 'no'.")
+    except KeyboardInterrupt:
+        print("Continuous translation stopped by user.")
+
+# Main Execution
+if __name__ == "__main__":
+    continuous_translation()
