@@ -1,0 +1,133 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Dec 23 22:44:41 2024
+
+@author: mayav
+"""
+
+import speech_recognition as sr
+from gtts import gTTS
+import pyaudio
+import os
+import time
+import pygame
+from googletrans import Translator
+
+# Supported languages and accents
+LANG_CHOICES = {
+    '1': ('en', 'US English'),  # Use 'en' for translation
+    '2': ('en', 'British English'),  # Use 'en' for translation
+    '3': ('te', 'Telugu'),
+    '4': ('hi', 'Hindi'),
+    '5': ('kn', 'Kannada')
+}
+
+def get_vb_audio_index():
+    """Get the index of the VB-Cable audio device."""
+    audio = pyaudio.PyAudio()
+    try:
+        for index in range(audio.get_device_count()):
+            device = audio.get_device_info_by_index(index)
+            if "VB-Audio" in device['name']:
+                return index
+        return None
+    finally:
+        audio.terminate()
+
+def get_language_choice(prompt):
+    """Prompt the user to select a language."""
+    print(prompt)
+    for key, (_, name) in LANG_CHOICES.items():
+        print(f"{key}. {name}")
+
+    choice = input("Enter choice (1-5): ").strip()
+    if choice in LANG_CHOICES:
+        return LANG_CHOICES[choice][0]  # Return only the language code
+    else:
+        print("Invalid selection.")
+        return None
+
+def translate_and_speak(input_lang, output_lang, vb_cable_index, user_type):
+    """Perform translation and play the translated speech."""
+    recognizer = sr.Recognizer()
+    translator = Translator()
+
+    with sr.Microphone(device_index=vb_cable_index) as source:
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+        try:
+            print(f"{user_type} - Listening for speech in {input_lang}...")
+            audio_data = recognizer.listen(source, timeout=None, phrase_time_limit=5)
+            print(f"{user_type} - Recognizing speech...")
+            recognized_text = recognizer.recognize_google(audio_data, language=input_lang)
+            print(f"{user_type} - Recognized Text: {recognized_text}")
+
+            print(f"{user_type} - Translating to {output_lang}...")
+            translated_text = translator.translate(recognized_text, src=input_lang, dest=output_lang).text
+            print(f"{user_type} - Translated Text: {translated_text}")
+
+            print(f"{user_type} - Converting translated text to speech...")
+            tts = gTTS(text=translated_text, lang=output_lang)  # Use output_lang directly
+            tts_output = f"output_{str(int(time.time()))}.mp3"
+            tts.save(tts_output)
+
+            print(f"{user_type} - Playing translated speech in {output_lang}...")
+            pygame.mixer.music.load(tts_output)
+            pygame.mixer.music.play()
+
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+
+            pygame.mixer.music.unload()
+            if os.path.exists(tts_output):
+                os.remove(tts_output)
+
+        except sr.UnknownValueError:
+            print(f"{user_type} - Could not understand the audio. Please speak clearly.")
+        except sr.RequestError as e:
+            print(f"{user_type} - API request failed: {e}")
+        except Exception as e:
+            print(f"{user_type} - An error occurred: {e}")
+
+def continuous_translation():
+    """Run continuous bidirectional translation."""
+    vb_cable_index = get_vb_audio_index()
+    if vb_cable_index is None:
+        print("Error: VB-Cable device not found. Check your audio setup.")
+        exit(1)
+
+    print(f"VB-Cable found at index: {vb_cable_index}")
+
+    input_lang_user1 = get_language_choice("Select input language for User 1 (You):")
+    output_lang_user2 = get_language_choice("Select output language for User 2 (Friend):")
+
+    input_lang_user2 = get_language_choice("Select input language for User 2 (Friend):")
+    output_lang_user1 = get_language_choice("Select output language for User 1 (You):")
+
+    if not all([input_lang_user1, output_lang_user2, input_lang_user2, output_lang_user1]):
+        print("Invalid language selection. Exiting.")
+        exit(1)
+
+    print("Starting continuous bidirectional translation. Press Ctrl+C to stop.")
+    pygame.mixer.init()
+
+    try:
+        while True:
+            mic_state = input("Is your microphone ON? (yes/no): ").strip().lower()
+
+            if mic_state == "yes":
+                print("External voice detected. Activating User 1 for system input.")
+                translate_and_speak(input_lang_user1, output_lang_user2, vb_cable_index, "User 1 (System)")
+            else:
+                print("Internal voice detected. Activating User 2 for external input.")
+                translate_and_speak(input_lang_user2, output_lang_user1, vb_cable_index, "User 2 (Other person)")
+
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("Continuous translation stopped by user.")
+    finally:
+        pygame.mixer.quit()
+
+
+if __name__ == "__main__":
+    continuous_translation()
