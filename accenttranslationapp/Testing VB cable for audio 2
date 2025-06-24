@@ -1,0 +1,15 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Nov 24 20:23:36 2024
+
+@author: mayav
+"""
+
+def list_audio_devices():
+    audio = pyaudio.PyAudio()
+    for index in range(audio.get_device_count()):
+        device = audio.get_device_info_by_index(index)
+        print(f"Device {index}: {device['name']}")
+    audio.terminate()
+
+list_audio_devices()
